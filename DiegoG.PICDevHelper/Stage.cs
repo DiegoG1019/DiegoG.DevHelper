@@ -1,4 +1,5 @@
 ﻿using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
 
@@ -23,8 +24,8 @@ public abstract class Stage
         StageName = GetType().Name;
     }
 
-    public abstract void Validate();
-    public abstract void ExecuteStage(string directory);
+    public abstract void Validate(List<Exception> exceptions);
+    public abstract void ExecuteStage(string directory, StageProcessor processor, StagePropertiesDictionary properties);
     public static Stage[] DeserializeStages(Stream jsonStream)
     {
         var doc = JsonDocument.Parse(jsonStream);

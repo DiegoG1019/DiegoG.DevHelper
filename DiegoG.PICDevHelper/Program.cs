@@ -35,13 +35,12 @@ static class Program
 
             Console.WriteLine($"Reading config...");
 
-            Stage[] stages;
-
+            StageProcessor processor;
             var cfile = Path.Combine(Dir, "picdevhelper_config.json");
             if (File.Exists(cfile))
             {
                 using var file = File.OpenRead(cfile);
-                stages = Stage.DeserializeStages(file);
+                processor = new(Stage.DeserializeStages(file));
             }
             else
             {
@@ -52,19 +51,7 @@ static class Program
                 return;
             }
 
-            Console.WriteLine("Validating stages...");
-            foreach (var stage in stages)
-            {
-                Console.WriteLine($" > Validating stage {stage.StageName}{(stage.Name is null ? "" : $"({stage.Name})")}");
-                stage.Validate();
-            }
-
-            Console.WriteLine("Commencing stages...");
-            foreach (var stage in stages)
-            {
-                Console.WriteLine($" > Comencing stage {stage.StageName}{(stage.Name is null ? "" : $"({stage.Name})")}");
-                stage.ExecuteStage(Dir);
-            }
+            processor.Start(Dir);
 
             Console.WriteLine("Finished, waiting 5 seconds before shuttng down");
             Thread.Sleep(5_000);

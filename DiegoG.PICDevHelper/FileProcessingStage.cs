@@ -36,8 +36,6 @@ public sealed class FileProcessingStage : Stage
 
     public List<KeyValuePair<string, string>>? CommandValues { get; init; }
 
-    public List<KeyValuePair<string, string>>? Environment { get; init; }
-
     public string? IncludedFileFormat { get; init; }
     public int? IncludedFileTerminationTrim { get; init; }
     public string? IncludedFileTermination { get; init; }
@@ -62,7 +60,7 @@ public sealed class FileProcessingStage : Stage
             .Replace(ProgramDataFormatKey, System.Environment.GetFolderPath(System.Environment.SpecialFolder.ProgramFiles))
             .ToString();
 
-    private string BuildCommand(string dir, string working, string temp, out HashSet<string> incl)
+    private string BuildCommand(string dir, string temp, out HashSet<string> incl)
     {
         StringBuilder final = new(CommandArgumentsFormat);
         StringBuilder buffer = new(100);
@@ -78,7 +76,7 @@ public sealed class FileProcessingStage : Stage
         {
             incl = new();
             foreach (var inc in IncludedFileTypes!)
-                foreach (var file in Directory.EnumerateFiles(Path.Combine(dir, Files ?? ""), $"*.{inc}").Where(Program.Exclude).Where(fn => (working is null || !fn.Contains(working, StringComparison.InvariantCultureIgnoreCase))))
+                foreach (var file in Directory.EnumerateFiles(Path.Combine(dir, Files ?? ""), $"*.{inc}").Where(Program.Exclude))
                     incl.Add(file);
             BuildList(final, buffer, sub_buffer, incl, IncludedFileFormat, FileFormatKey, IncludedFileListFormatKey, IncludedFileTerminationTrim, IncludedFileTermination, temp);
         }
@@ -128,14 +126,13 @@ public sealed class FileProcessingStage : Stage
         final.Replace(finalKey, buffer.Remove(buffer.Length - terminationTrim ?? 0, terminationTrim ?? 0).Append(termination).ToString());
     }
 
-    public override void ExecuteStage(string directory)
+    public override void ExecuteStage(string directory, StageProcessor processor, StagePropertiesDictionary properties)
     {
+        var temp = properties.TempDirectory;
         Console.WriteLine("Building command...");
-        var temp = Path.Combine(Path.GetTempPath(), $"{{{Guid.NewGuid()}-{Guid.NewGuid()}}}");
-        var working = Path.Combine(directory, Output ?? "output");
-        var cmd = BuildCommand(directory, working, temp, out var incl);
-
-        Directory.CreateDirectory(temp);
+        var cmd = BuildCommand(directory, temp, out var incl);
+        properties.CommandArguments = cmd;
+        properties.CommandFileName = GetFileName();
 
         Console.WriteLine($"Succesfully built command, copying files to '{temp}'...");
 
@@ -174,37 +171,10 @@ public sealed class FileProcessingStage : Stage
                 File.Copy(orig, dest);
             }
 
-        Console.WriteLine("Succesfully copied files, starting...");
-
-        if (Directory.Exists(working))
-            Directory.Delete(working, true);
-        Directory.CreateDirectory(working);
-
-        var pstart = new ProcessStartInfo();
-        if (Environment?.Count is > 0)
-            foreach (var kv in Environment)
-                pstart.Environment.Add(kv!);
-
-        pstart.RedirectStandardOutput = false;
-        pstart.FileName = GetFileName();
-        pstart.Arguments = cmd;
-        pstart.WorkingDirectory = working;
-
-        Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine(new string('=', Console.BufferWidth));
-        Console.ForegroundColor = ConsoleColor.Gray;
-        Console.WriteLine();
-        Process.Start(pstart)!.WaitForExit();
-        Console.WriteLine();
-        Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine(new string('=', Console.BufferWidth));
-
-        Console.ForegroundColor = ConsoleColor.Gray;
-        Console.WriteLine("Cleaning up...");
-        Directory.Delete(temp, true);
+        Console.WriteLine("Succesfully copied files");
     }
 
-    public override void Validate()
+    public override void Validate(List<Exception> exceptions)
     {
         void Check(List<Exception> excpList, ICollection<string>? data, string? dataFormat, string dataFormatKey, string dataKey,
         [CallerArgumentExpression(nameof(dataFormat))] string dataFormatName = "",
@@ -230,8 +200,6 @@ public sealed class FileProcessingStage : Stage
                 else if (CommandArgumentsFormat.Contains(dataKey) is false) excpList.Add(new InvalidDataException($"CommandArgumentsFormat must contain {dataKeyName} ({dataKey}) if {dataName} has elements"));
             }
         }
-
-        var exceptions = new List<Exception>();
 
         if (string.IsNullOrWhiteSpace(FileName)) throw new InvalidDataException("FileName must not be null");
 
